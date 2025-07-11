@@ -1,7 +1,7 @@
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.models import MessageEvent, TextMessage, TextSendMessage
-import openai
+from openai import OpenAI
 import os
 from dotenv import load_dotenv
 
@@ -11,7 +11,7 @@ load_dotenv()
 # 環境変数から読み込み
 line_bot_api = LineBotApi(os.getenv("LINE_CHANNEL_ACCESS_TOKEN"))
 handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
-openai.api_key = os.getenv("OPENAI_API_KEY")
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))  # ← ここ大事！
 
 app = Flask(__name__)
 
@@ -23,7 +23,7 @@ def callback():
     try:
         handler.handle(body, signature)
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"❌ Error: {e}")
         abort(400)
     return 'OK'
 
@@ -41,17 +41,18 @@ def handle_message(event):
     作り方:
     """
 
-    response = openai.ChatCompletion.create(
-        model="gpt-4",
-        messages=[{"role": "user", "content": prompt}]
-    )
-
-    reply_text = response.choices[0].message["content"]
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=[{"role": "user", "content": prompt}]
+        )
+        reply_text = response.choices[0].message.content
+    except Exception as e:
+        reply_text = f"GPTエラー: {e}"
 
     line_bot_api.reply_message(
         event.reply_token,
         TextSendMessage(text=reply_text)
     )
 
-if __name__ == "__main__":
-    app.run(port=8000)
+# Render用：app.run() は消してOK（gunicornが使う）
